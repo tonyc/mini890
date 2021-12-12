@@ -1,5 +1,5 @@
-use std::net::{TcpStream};
 use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::str::from_utf8;
 
 fn main() {
@@ -42,28 +42,23 @@ fn main() {
                                 } else {
                                     println!("Incorrect username/password");
                                 }
-                            },
+                            }
                             Err(e) => {
                                 println!("Error receiving data: {}", e);
                             }
                         }
-
                     } else {
                         println!("Connection denied");
                     }
-
-                },
+                }
                 Err(e) => {
                     println!("Failed to receive data: {}", e);
                 }
             }
-
-
-        },
+        }
         Err(e) => {
             println!("Failed to connect: {}", e);
         }
     }
     println!("Client Terminated.");
 }
-
