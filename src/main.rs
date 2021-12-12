@@ -18,44 +18,33 @@ fn main() {
 
             let mut data = [0 as u8; 1024];
 
-            match stream.read(&mut data) {
-                Ok(len) => {
-                    println!("read {} bytes", len);
+            stream.read(&mut data).unwrap();
+            let text = from_utf8(&data).unwrap();
 
-                    let text = from_utf8(&data).unwrap();
+            // bug: text has the entire 1k buffer padded with zeroes
+            println!("Read text: {}", text);
 
-                    // bug: text has the entire 1k buffer padded with zeroes
-                    println!("Read text: {}", text);
+            //let pos = text.find(";").unwrap();
+            let response = &text[0..(text.find(";").unwrap())];
 
-                    let pos = text.find(";").unwrap();
-                    println!("Found separator at position: {}", pos);
+            if RESP_CONNECTION_ALLOWED.eq(response) {
+                println!("Sending username/password");
+                stream.write(CMD_USER_PASS.as_bytes()).unwrap();
+                stream.read(&mut data).unwrap();
 
-                    if RESP_CONNECTION_ALLOWED.eq(&text[0..pos]) {
-                        println!("Sending username/password");
-                        stream.write(CMD_USER_PASS.as_bytes()).unwrap();
+                let text = from_utf8(&data).unwrap();
+                println!("Reply from l/p: {}", text);
 
-                        stream.read(&mut data).unwrap();
+                let response = &text[0..(text.find(";").unwrap())];
+                println!("response: {}", response);
 
-                        let text = from_utf8(&data).unwrap();
-                        println!("Reply from l/p: {}", text);
-
-                        let pos = text.find(";").unwrap();
-                        let response = &text[0..pos];
-                        println!("response: {}", response);
-
-                        if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
-                            println!("Successfully authenticated!");
-                        } else {
-                            println!("Incorrect username/password");
-                        }
-
-                    } else {
-                        println!("Connection denied");
-                    }
+                if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
+                    println!("Successfully authenticated!");
+                } else {
+                    println!("Incorrect username/password");
                 }
-                Err(e) => {
-                    println!("Failed to receive data: {}", e);
-                }
+            } else {
+                println!("Connection denied");
             }
         }
         Err(e) => {
