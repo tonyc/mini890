@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::str::from_utf8;
 
 fn main() {
+    let request_connection = String::from("##CN;");
     let connection_allowed = String::from("##CN1");
     let authentication_successful = String::from("##ID1");
 
@@ -10,8 +11,7 @@ fn main() {
         Ok(mut stream) => {
             println!("Connected to server on port 1234");
 
-            let msg = b"##CN;";
-            stream.write(msg).unwrap();
+            stream.write(request_connection.as_bytes()).unwrap();
             println!("Sent connection request CN, awaiting reply...");
 
             let mut data = [0 as u8; 1024];
@@ -21,6 +21,7 @@ fn main() {
                     println!("read {} bytes", len);
 
                     let text = from_utf8(&data).unwrap();
+                    // bug: text has the entire 1k buffer padded with zeroes
                     println!("Read text: {}", text);
 
                     let pos = text.find(";").unwrap();
