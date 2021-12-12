@@ -24,7 +24,6 @@ fn main() {
             // bug: text has the entire 1k buffer padded with zeroes
             println!("Read text: {}", text);
 
-            //let pos = text.find(";").unwrap();
             let response = &text[0..(text.find(";").unwrap())];
 
             if RESP_CONNECTION_ALLOWED.eq(response) {
@@ -36,7 +35,6 @@ fn main() {
                 println!("Reply from l/p: {}", text);
 
                 let response = &text[0..(text.find(";").unwrap())];
-                println!("response: {}", response);
 
                 if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
                     println!("Successfully authenticated!");
