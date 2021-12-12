@@ -3,15 +3,17 @@ use std::net::TcpStream;
 use std::str::from_utf8;
 
 fn main() {
-    let request_connection = String::from("##CN;");
-    let connection_allowed = String::from("##CN1");
-    let authentication_successful = String::from("##ID1");
+    static RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
+    static RESP_CONNECTION_ALLOWED: &str = "##CN1";
+
+    static CMD_REQUEST_CONNECTION: &str = "##CN;";
+    static CMD_USER_PASS: &str = "##ID10705kenwoodadmin;";
 
     match TcpStream::connect("localhost:1234") {
         Ok(mut stream) => {
             println!("Connected to server on port 1234");
 
-            stream.write(request_connection.as_bytes()).unwrap();
+            stream.write(CMD_REQUEST_CONNECTION.as_bytes()).unwrap();
             println!("Sent connection request CN, awaiting reply...");
 
             let mut data = [0 as u8; 1024];
@@ -28,9 +30,9 @@ fn main() {
                     let pos = text.find(";").unwrap();
                     println!("Found separator at position: {}", pos);
 
-                    if connection_allowed.eq(&text[0..pos]) {
+                    if RESP_CONNECTION_ALLOWED.eq(&text[0..pos]) {
                         println!("Sending username/password");
-                        stream.write(b"##ID10705kenwoodadmin;").unwrap();
+                        stream.write(CMD_USER_PASS.as_bytes()).unwrap();
 
                         match stream.read(&mut data) {
                             Ok(_) => {
@@ -41,7 +43,7 @@ fn main() {
                                 let response = &text[0..pos];
                                 println!("response: {}", response);
 
-                                if authentication_successful.eq(&response) {
+                                if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
                                     println!("Successfully authenticated!");
                                 } else {
                                     println!("Incorrect username/password");

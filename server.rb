@@ -27,6 +27,7 @@ def handle_line(line, socket)
 end
 
 puts "starting tcp server on :#{PORT}"
+
 TCPServer.open(PORT) do |server|
   puts "**** Server waiting for connections"
 
