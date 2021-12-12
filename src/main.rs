@@ -34,25 +34,21 @@ fn main() {
                         println!("Sending username/password");
                         stream.write(CMD_USER_PASS.as_bytes()).unwrap();
 
-                        match stream.read(&mut data) {
-                            Ok(_) => {
-                                let text = from_utf8(&data).unwrap();
-                                println!("Reply from l/p: {}", text);
+                        stream.read(&mut data).unwrap();
 
-                                let pos = text.find(";").unwrap();
-                                let response = &text[0..pos];
-                                println!("response: {}", response);
+                        let text = from_utf8(&data).unwrap();
+                        println!("Reply from l/p: {}", text);
 
-                                if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
-                                    println!("Successfully authenticated!");
-                                } else {
-                                    println!("Incorrect username/password");
-                                }
-                            }
-                            Err(e) => {
-                                println!("Error receiving data: {}", e);
-                            }
+                        let pos = text.find(";").unwrap();
+                        let response = &text[0..pos];
+                        println!("response: {}", response);
+
+                        if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
+                            println!("Successfully authenticated!");
+                        } else {
+                            println!("Incorrect username/password");
                         }
+
                     } else {
                         println!("Connection denied");
                     }
