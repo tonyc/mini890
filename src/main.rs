@@ -4,6 +4,7 @@ use std::str::from_utf8;
 
 fn main() {
     let connection_allowed = String::from("##CN1");
+    let authentication_successful = String::from("##ID1");
 
     match TcpStream::connect("localhost:1234") {
         Ok(mut stream) => {
@@ -25,12 +26,6 @@ fn main() {
                     let pos = text.find(";").unwrap();
                     println!("Found separator at position: {}", pos);
 
-                    //let text_len = text.len();
-                    //println!("Got reply: {:?} with len: {}", text, text_len);
-                    //println!("sliced text: {}", text[..pos]);
-                    //let sliced = &text[0..pos];
-                    //println!("sliced: {}", sliced);
-
                     if connection_allowed.eq(&text[0..pos]) {
                         println!("Sending username/password");
                         stream.write(b"##ID10705kenwoodadmin;").unwrap();
@@ -40,7 +35,8 @@ fn main() {
                                 let text = from_utf8(&data).unwrap();
                                 println!("Reply from l/p: {}", text);
 
-                                if String::from("##ID1;").eq(text) {
+                                let pos = text.find(";").unwrap();
+                                if authentication_successful.eq(&text[0..pos]) {
                                     println!("Successfully authenticated!");
                                 } else {
                                     println!("Incorrect username/password");
