@@ -21,20 +21,22 @@ fn main() {
             stream.read(&mut data).unwrap();
             let text = from_utf8(&data).unwrap();
 
-            // bug: text has the entire 1k buffer padded with zeroes
+            // BUG: text has the entire 1k buffer padded with zeroes
             println!("Read text: {}", text);
 
-            let response = &text[0..(text.find(";").unwrap())];
+            let response = read_cmd(text);
 
             if RESP_CONNECTION_ALLOWED.eq(response) {
                 println!("Sending username/password");
                 stream.write(CMD_USER_PASS.as_bytes()).unwrap();
+
+                // BUG: We should probably reset the data buffer each time we read
                 stream.read(&mut data).unwrap();
 
                 let text = from_utf8(&data).unwrap();
-                println!("Reply from l/p: {}", text);
+                println!("Authentication response: {}", text);
 
-                let response = &text[0..(text.find(";").unwrap())];
+                let response = read_cmd(text);
 
                 if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
                     println!("Successfully authenticated!");
@@ -51,3 +53,10 @@ fn main() {
     }
     println!("Client Terminated.");
 }
+
+// slices a str up to the first semicolon
+fn read_cmd(s: &str) -> &str {
+    let pos = s.find(";").unwrap();
+    &s[..pos]
+}
+
