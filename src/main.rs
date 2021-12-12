@@ -21,6 +21,7 @@ fn main() {
                     println!("read {} bytes", len);
 
                     let text = from_utf8(&data).unwrap();
+
                     // bug: text has the entire 1k buffer padded with zeroes
                     println!("Read text: {}", text);
 
@@ -37,7 +38,10 @@ fn main() {
                                 println!("Reply from l/p: {}", text);
 
                                 let pos = text.find(";").unwrap();
-                                if authentication_successful.eq(&text[0..pos]) {
+                                let response = &text[0..pos];
+                                println!("response: {}", response);
+
+                                if authentication_successful.eq(&response) {
                                     println!("Successfully authenticated!");
                                 } else {
                                     println!("Incorrect username/password");
