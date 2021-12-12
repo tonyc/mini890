@@ -2,20 +2,21 @@ require 'socket'
 PORT = 1234
 
 def handle_line(line, socket)
-  if line == "##CN;"
+  case line.chomp(";")
+  when "##CN"
     puts "Received connection request, allowing connections"
     socket.write "##CN1;"
-  elsif line == "##ID10705kenwoodadmin;"
+  when "##ID10705kenwoodadmin"
     puts "Successfully authenticated user"
     client_authenticated = true
-    socket.write "##ID1;"
-  elsif line.start_with?("##ID")
+    socket.write "##ID1"
+  when /^##ID/
     puts "Incorrect authentication, rejecting: #{line}"
     socket.write "##ID0;"
-  elsif line == "AI1;"
+  when "AI1"
     puts "Auto-info ON"
     socket.write line
-  elsif line == "PS;"
+  when "PS"
     socket.write "PS1;"
   else
     puts "Received unknown command: #{line.inspect}"
