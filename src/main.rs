@@ -1,13 +1,16 @@
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::str::from_utf8;
+// use std::vec;
 
 fn main() {
-    static RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
-    static RESP_CONNECTION_ALLOWED: &str = "##CN1";
+    const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
+    const RESP_CONNECTION_ALLOWED: &str = "##CN1";
 
-    static CMD_REQUEST_CONNECTION: &str = "##CN;";
-    static CMD_USER_PASS: &str = "##ID10705kenwoodadmin;";
+    const CMD_REQUEST_CONNECTION: &str = "##CN;";
+    const CMD_USER_PASS: &str = "##ID10705kenwoodadmin;";
+
+    const BUFFER_SIZE:usize = 1286;
 
     let mut stream: TcpStream = TcpStream::connect("localhost:1234").expect("Could not connect to server");
 
@@ -16,43 +19,45 @@ fn main() {
     stream.write(CMD_REQUEST_CONNECTION.as_bytes()).unwrap();
     println!("Sent connection request CN, awaiting reply...");
 
-    let mut data = [0 as u8; 1024];
+    let mut buf = [0 as u8; BUFFER_SIZE];
+    // let data: Vec<u8> = vec![];
 
-    stream.read(&mut data).unwrap();
+    stream.read(&mut buf).unwrap();
 
-    let text = from_utf8(&data).unwrap();
+    let text = from_utf8(&buf).unwrap();
 
     // BUG: text has the entire 1k buffer padded with zeroes
     println!("Read text: {}", text);
 
-    let response = read_cmd(text);
+    match find_cmd(text) {
+        RESP_CONNECTION_ALLOWED => {
+            println!("Sending username/password");
+            stream.write(CMD_USER_PASS.as_bytes()).unwrap();
 
-    if RESP_CONNECTION_ALLOWED.eq(response) {
-        println!("Sending username/password");
-        stream.write(CMD_USER_PASS.as_bytes()).unwrap();
+            // BUG: We should probably reset the data buffer each time we read
+            stream.read(&mut buf).unwrap();
 
-        // BUG: We should probably reset the data buffer each time we read
-        stream.read(&mut data).unwrap();
+            let text = from_utf8(&buf).unwrap();
+            println!("Authentication response: {}", text);
 
-        let text = from_utf8(&data).unwrap();
-        println!("Authentication response: {}", text);
+            let response = find_cmd(text);
 
-        let response = read_cmd(text);
+            if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
+                println!("Successfully authenticated!");
+            } else {
+                println!("Incorrect username/password");
+            }
 
-        if RESP_AUTHENTICATION_SUCCESSFUL.eq(response) {
-            println!("Successfully authenticated!");
-        } else {
-            println!("Incorrect username/password");
         }
-    } else {
-        println!("Connection denied");
+
+        _ => { println!("Connection denied"); }
     }
 
     println!("Client Terminated.");
 }
 
 // slices a str up to the first semicolon
-fn read_cmd(s: &str) -> &str {
+fn find_cmd(s: &str) -> &str {
     let pos: usize = s.find(";").unwrap();
     &s[..pos]
 }
