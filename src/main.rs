@@ -15,6 +15,10 @@ const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
 const BUFFER_SIZE: usize = 1286; // this appears to be the maximum size of the ##DD2 bandscope message
 
+enum Commands {
+    PowerState
+}
+
 fn main() {
     let mut stream: TcpStream = TcpStream::connect(HOST).expect("Could not connect to server");
 
@@ -23,28 +27,40 @@ fn main() {
     radio_authenticate(&stream).expect("Could not authenticate");
     println!("Authentication successful!");
 
-    let (tx, _rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel();
+
+    //let (tx_stream, rx_stream) = stream.s
 
     let timer_thread = thread::spawn(move || {
         println!("spawning timer thread");
         loop {
             println!(" --> async thread!");
             //send_cmd(&stream, "PS;");
-            tx.send("PS").unwrap();
-            sleep(1000);
+            tx.send(Commands::PowerState).unwrap();
+            sleep(5000);
         }
     });
+
+    //let connection_tx_thread = thread::spawn(move || {
+    //    match rx.recv() {
+    //        Ok(Commands::PowerState) => {
+    //            println!("received commands::powerstate");
+    //            send_cmd(&stream, "PS;").unwrap();
+    //        }
+    //        _ => {
+    //            println!("Nothing to recv");
+    //        }
+    //    }
+    //});
 
     let connection_thread = thread::spawn(move || {
         println!("spawning connection thread");
 
-        send_cmd(&stream, "AI2;").unwrap();
+        //send_cmd(&stream, "AI2;").unwrap();
         //send_cmd(&stream, "DD11;").unwrap();
 
         let mut buf = [' ' as u8; BUFFER_SIZE];
         loop {
-            send_cmd(&stream, "PS;").unwrap();
-
             match stream.read(&mut buf) {
                 Ok(0) => {
                     println!("No bytes to read. Did the radio drop the connection?");
@@ -73,7 +89,7 @@ fn main() {
                 }
             }
 
-            sleep(500);
+            thread::yield_now();
         } // loop
 
         println!("Client Terminated.");
