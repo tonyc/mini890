@@ -23,7 +23,7 @@ fn main() {
     radio_authenticate(&stream).expect("Could not authenticate");
     println!("Authentication successful!");
 
-    let (tx, rx) = mpsc::channel();
+    let (tx, _rx) = mpsc::channel();
 
     let timer_thread = thread::spawn(move || {
         println!("spawning timer thread");
@@ -40,13 +40,10 @@ fn main() {
 
         send_cmd(&stream, "AI2;").unwrap();
         //send_cmd(&stream, "DD11;").unwrap();
-        // now just start reading commands in a loop
+
         let mut buf = [' ' as u8; BUFFER_SIZE];
         loop {
-            //let received_command: &str = rx.recv().unwrap();
-            //println!("received: {}", received_command);
             send_cmd(&stream, "PS;").unwrap();
-            sleep(500);
 
             match stream.read(&mut buf) {
                 Ok(0) => {
@@ -55,15 +52,10 @@ fn main() {
                 }
 
                 Ok(n) => {
-                    //println!("read {} bytes", n);
-
-                    //println!("Buffer: {:?}", buf);
                     let text = from_utf8(&buf[0..n]).unwrap();
-                    //println!("sliced text: {:?}", text);
-
                     let mut cmds: Vec<&str> = vec![];
 
-                    for cmd in text.split_terminator(";") { //.filter(|x| x.trim() != "") {
+                    for cmd in text.split_terminator(";") {
                         cmds.push(cmd);
                     }
 
@@ -80,9 +72,11 @@ fn main() {
                     break;
                 }
             }
-        }
-        println!("Client Terminated.");
 
+            sleep(500);
+        } // loop
+
+        println!("Client Terminated.");
     });
 
     timer_thread.join().unwrap();
