@@ -20,8 +20,8 @@ const PASS: &str = "testpass123!";
 const ENABLE_BANDSCOPE: bool = false;
 const MPSC_CHANNEL_SIZE: usize = 64;
 
-// 5 + 1280 + 1
-// ##DD2 + [640 * 2] + ;
+//   5   +    1280    + 1
+// ##DD2 + [u8: 1280] + ;
 const BUFFER_SIZE: usize = 1286; // this appears to be the maximum size of the ##DD2 bandscope message
 
 #[derive(Debug)]
