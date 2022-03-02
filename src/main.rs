@@ -1,4 +1,13 @@
 use std::str::from_utf8;
+use std::io::stdout;
+
+use crossterm::{
+    cursor,
+    execute,
+    terminal::{Clear, ClearType},
+    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    Result,
+};
 
 use tokio::io::{split, AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -12,6 +21,8 @@ const CMD_REQUEST_CONNECTION: &[u8] = b"##CN;";
 const CMD_ENABLE_AUTO_INFO: &[u8] = b"AI2;";
 const CMD_ENABLE_BANDSCOPE: &[u8] = b"DD01;";
 const RADIO_KEEPALIVE_MS: u64 = 5000;
+const CMD_REQUEST_VFO_A: &[u8] = b"FA;";
+const CMD_REQUEST_VFO_B: &[u8] = b"FB;";
 
 const HOST: &str = "192.168.1.229:60000";
 const USER: &str = "testuser";
@@ -30,12 +41,12 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let mut stream: TcpStream = TcpStream::connect(HOST).await?;
-    println!("Connected to server on port 1234");
+    //println!("Connected to server on port 1234");
 
     stream.write(CMD_REQUEST_CONNECTION).await?;
-    println!("Sent connection request CN, awaiting reply...");
+    //println!("Sent connection request CN, awaiting reply...");
 
     let mut buf = [0 as u8; BUFFER_SIZE];
     stream.read(&mut buf).await?;
@@ -43,11 +54,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let text = from_utf8(&buf).unwrap();
 
     // BUG: text has the entire 1k buffer padded with zeroes
-    println!("Read text: {}", text);
+    //println!("Read text: {}", text);
 
     match find_cmd(text) {
         RESP_CONNECTION_ALLOWED => {
-            println!("Sending username/password");
+            //println!("Sending username/password");
             stream.write(&login_cmd(USER, PASS).as_bytes()).await?;
             //send_cmd(&stream, &login_cmd(USER, PASS));
 
@@ -55,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             stream.read(&mut buf).await?;
 
             let text = from_utf8(&buf).unwrap();
-            println!("Authentication response: {}", text);
+            //println!("Authentication response: {}", text);
 
             match find_cmd(text) {
                 RESP_AUTHENTICATION_SUCCESSFUL => {
@@ -66,28 +77,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if ENABLE_BANDSCOPE {
                         stream.write(CMD_ENABLE_BANDSCOPE).await?;
                     }
+
+                    stream.write(CMD_REQUEST_VFO_A).await?;
+                    stream.write(CMD_REQUEST_VFO_B).await?;
                 }
-                other => {
-                    println!("Unknown command: {:?}", other);
+                _other => {
+                    ()
+                    //println!("Unknown command: {:?}", other);
                 }
             }
         }
-        other => {
-            println!("Unknown command: {:?}", other);
+        _  => {
+            ()
         }
+        //other => {
+        //    //println!("Unknown command: {:?}", other);
+        //}
     }
 
     let (mut read_stream, mut write_stream) = split(stream);
     let (tx, mut rx) = mpsc::channel(MPSC_CHANNEL_SIZE);
 
+    execute!(
+        stdout(),
+        Clear(ClearType::All),
+        cursor::DisableBlinking,
+        cursor::Hide,
+        //cursor::SetCursorShape(cursor::CursorShape::UnderScore)
+        cursor::MoveTo(20, 0),
+        Print("[ mini890 ]")
+    ).unwrap();
+
+
+    //let(cols, rows) = size()?;
+
     let reader_thread = spawn(async move {
-        println!("spawning connection thread");
+        //println!("spawning connection thread");
 
         let mut buf = ['0' as u8; BUFFER_SIZE];
         loop {
             match read_stream.read(&mut buf).await.unwrap() {
                 0 => {
-                    println!("No bytes to read. Did the radio drop the connection?");
+                    //println!("No bytes to read. Did the radio drop the connection?");
                     break;
                 }
 
@@ -95,7 +126,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let text = from_utf8(&buf[0..n]).unwrap();
 
                     for cmd in text.split_terminator(";") {
-                        println!("[DN] {}", cmd);
+                        match &cmd[0..=1] {
+                            "FA" => {
+                                execute!(
+                                    stdout(),
+                                    cursor::MoveTo(0, 1),
+                                    SetForegroundColor(Color::White),
+                                    SetBackgroundColor(Color::DarkBlue),
+                                    Print(cmd),
+                                ).unwrap();
+
+                            }
+
+                            "FB" => {
+                                execute!(
+                                    stdout(),
+                                    cursor::MoveTo(40, 1),
+                                    SetForegroundColor(Color::White),
+                                    SetBackgroundColor(Color::DarkBlue),
+                                    Print(cmd),
+                                ).unwrap();
+
+                            }
+
+                            "SM" => {
+                                execute!(
+                                    stdout(),
+                                    cursor::MoveTo(0, 5),
+                                    SetForegroundColor(Color::White),
+                                    SetBackgroundColor(Color::DarkBlue),
+                                    Print(cmd),
+                                ).unwrap();
+
+                            }
+
+                            _  => {
+                                    //Print(format!("[DN] {}", cmd)),
+                                ()
+                            }
+                        }
                     }
 
                     // reset the buffer
@@ -118,22 +187,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //});
 
     let timer_thread = spawn(async move {
-        println!("spawning timer thread");
+        //println!("spawning timer thread");
         loop {
-            println!("Pinging radio");
+            //println!("Pinging radio");
             tx.send(Commands::PowerStateGet).await.unwrap();
             sleep(Duration::from_millis(RADIO_KEEPALIVE_MS)).await;
         }
     });
 
 
-    println!("entering receive loop");
+    //println!("entering receive loop");
     while let Some(cmd) = rx.recv().await {
-        println!("Got cmd: {:?}", cmd);
+        //println!("Got cmd: {:?}", cmd);
 
         match cmd {
             Commands::PowerStateGet => {
-                println!("keeping radio alive with PS;");
+                //println!("keeping radio alive with PS;");
                 write_stream.write(b"PS;").await.unwrap();
             }
         }
