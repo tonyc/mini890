@@ -1,9 +1,13 @@
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::str::from_utf8;
 use std::thread;
 use std::time::Duration;
-use std::sync::mpsc;
+//use std::sync::mpsc;
+
+//use tokio::join;
+use tokio::spawn;
+use tokio::net::TcpStream;
+use tokio::io::{split, AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
 
 const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
 const RESP_CONNECTION_ALLOWED: &str = "##CN1";
@@ -15,59 +19,72 @@ const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
 const BUFFER_SIZE: usize = 1286; // this appears to be the maximum size of the ##DD2 bandscope message
 
-enum Commands {
-    PowerState
-}
+//#[derive(Debug)]
+//enum Commands {
+//    PowerState
+//}
 
-fn main() {
-    let mut stream: TcpStream = TcpStream::connect(HOST).expect("Could not connect to server");
-
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stream: TcpStream = TcpStream::connect(HOST).await?;
     println!("Connected to server on port 1234");
 
-    radio_authenticate(&stream).expect("Could not authenticate");
-    println!("Authentication successful!");
+    stream.write(CMD_REQUEST_CONNECTION.as_bytes()).await?;
+    println!("Sent connection request CN, awaiting reply...");
 
-    let (tx, rx) = mpsc::channel();
+    let mut buf = [0 as u8; BUFFER_SIZE];
+    stream.read(&mut buf).await?;
 
-    //let (tx_stream, rx_stream) = stream.s
+    let text = from_utf8(&buf).unwrap();
 
-    let timer_thread = thread::spawn(move || {
-        println!("spawning timer thread");
-        loop {
-            println!(" --> async thread!");
-            //send_cmd(&stream, "PS;");
-            tx.send(Commands::PowerState).unwrap();
-            sleep(5000);
+    // BUG: text has the entire 1k buffer padded with zeroes
+    println!("Read text: {}", text);
+
+    match find_cmd(text) {
+        RESP_CONNECTION_ALLOWED => {
+            println!("Sending username/password");
+            stream.write(&login_cmd(USER, PASS).as_bytes()).await?;
+            //send_cmd(&stream, &login_cmd(USER, PASS));
+
+            // TODO: We should probably reset the data buffer each time we read
+            stream.read(&mut buf).await?;
+
+            let text = from_utf8(&buf).unwrap();
+            println!("Authentication response: {}", text);
+
+            match find_cmd(text) {
+                RESP_AUTHENTICATION_SUCCESSFUL => {
+                    println!("Authentication successful!");
+                    stream.write("AI2;".as_bytes()).await?;
+
+                    // enable bandscope
+                    //stream.write("DD11;".as_bytes()).await?;
+                }
+                other => {
+                    println!("Unknown command: {:?}", other);
+                }
+            }
         }
-    });
+        other => {
+            println!("Unknown command: {:?}", other);
+        }
+    }
 
-    //let connection_tx_thread = thread::spawn(move || {
-    //    match rx.recv() {
-    //        Ok(Commands::PowerState) => {
-    //            println!("received commands::powerstate");
-    //            send_cmd(&stream, "PS;").unwrap();
-    //        }
-    //        _ => {
-    //            println!("Nothing to recv");
-    //        }
-    //    }
-    //});
+    let (mut read_stream, mut write_stream) = split(stream);
+    let (tx, mut rx) = mpsc::channel(32);
 
-    let connection_thread = thread::spawn(move || {
+    let reader_thread = spawn(async move {
         println!("spawning connection thread");
-
-        //send_cmd(&stream, "AI2;").unwrap();
-        //send_cmd(&stream, "DD11;").unwrap();
 
         let mut buf = [' ' as u8; BUFFER_SIZE];
         loop {
-            match stream.read(&mut buf) {
-                Ok(0) => {
+            match read_stream.read(&mut buf).await.unwrap() {
+                0 => {
                     println!("No bytes to read. Did the radio drop the connection?");
                     break;
                 }
 
-                Ok(n) => {
+                n => {
                     let text = from_utf8(&buf[0..n]).unwrap();
                     let mut cmds: Vec<&str> = vec![];
 
@@ -83,10 +100,10 @@ fn main() {
                     buf.iter_mut().for_each(|x| *x = ' ' as u8);
                 }
 
-                Err(other) => {
-                    println!("Error reading stream: {:?}", other);
-                    break;
-                }
+                //Err(other) => {
+                //    println!("Error reading stream: {:?}", other);
+                //    break;
+                //}
             }
 
             thread::yield_now();
@@ -95,49 +112,113 @@ fn main() {
         println!("Client Terminated.");
     });
 
-    timer_thread.join().unwrap();
-    connection_thread.join().unwrap();
-}
+    let writer_thread = spawn(async move {
+        println!("writer thread spawned");
 
-fn radio_authenticate(mut stream: &TcpStream) -> Result<&TcpStream, &str> {
-    send_cmd(&stream, &CMD_REQUEST_CONNECTION).unwrap();
-    println!("Sent connection request CN, awaiting reply...");
-
-    let mut buf = [0 as u8; BUFFER_SIZE];
-    // let data: Vec<u8> = vec![];
-
-    stream.read(&mut buf).unwrap();
-
-    let text = from_utf8(&buf).unwrap();
-
-    // BUG: text has the entire 1k buffer padded with zeroes
-    println!("Read text: {}", text);
-
-    match find_cmd(text) {
-        RESP_CONNECTION_ALLOWED => {
-            println!("Sending username/password");
-            send_cmd(&stream, &login_cmd(USER, PASS)).unwrap();
-
-            // BUG: We should probably reset the data buffer each time we read
-            stream.read(&mut buf).unwrap();
-
-            let text = from_utf8(&buf).unwrap();
-            println!("Authentication response: {}", text);
-
-            match find_cmd(text) {
-                RESP_AUTHENTICATION_SUCCESSFUL => Ok(stream),
-                _ => Err("Incorrect username/password"),
-            }
+        while let Some(cmd) = rx.recv().await {
+            println!("Got cmd: {:?}", cmd);
+            write_stream.write_all(cmd).await.unwrap();
         }
 
-        _ => Err("Connection denied"),
-    }
+        //loop {
+        //    match rx.recv().await {
+        //        Some(cmd) => {
+        //            println!("Got something: {:?}", cmd);
+        //            write_stream.write_all(cmd.as_bytes()).await.unwrap();
+        //        }
+        //        None => {
+        //            println!("Got nothing");
+        //        }
+        //    }
+        //    //println!("recv loop");
+        //    ////println!("received cmd: {:?}", cmd);
+
+        //    //let cmd = rx.recv().;
+        //    ////write_stream.write(cmd.as_bytes()).await.unwrap();
+        //}
+
+        //while let Some(cmd) = rx.recv().await {
+        //    println!("received cmd: {:?}", cmd);
+        //    write_stream.write(cmd.as_bytes()).await.unwrap();
+        //}
+        //println!("Writer thread done");
+
+    });
+
+    let timer_thread = spawn(async move {
+        println!("spawning timer thread");
+        loop {
+            println!("pinging radio");
+            tx.send("PS;".as_bytes()).await.unwrap();
+            sleep(500);
+        }
+    });
+
+
+    timer_thread.await.unwrap();
+    reader_thread.await.unwrap();
+    writer_thread.await.unwrap();
+
+    Ok(())
 }
 
-fn send_cmd(mut stream: &TcpStream, cmd: &str) -> Result<usize, std::io::Error> {
-    println!("[UP] {}", cmd);
-    stream.write(cmd.as_bytes())
-}
+
+//async fn radio_authenticate(mut read_half: ReadHalf<TcpStream>, mut write_half: WriteHalf<TcpStream>) -> Result<(), &'static str> {
+//    send_cmd_async(write_half, &CMD_REQUEST_CONNECTION).await.unwrap();
+//    println!("Sent connection request CN, awaiting reply...");
+
+//    let mut buf = [0 as u8; BUFFER_SIZE];
+//    // let data: Vec<u8> = vec![];
+
+//    read_half.read(&mut buf).await.unwrap();
+
+//    let text = from_utf8(&buf).unwrap();
+
+//    // BUG: text has the entire 1k buffer padded with zeroes
+//    println!("Read text: {}", text);
+
+//    match find_cmd(text) {
+//        RESP_CONNECTION_ALLOWED => {
+//            println!("Sending username/password");
+//            send_cmd_async(write_half, &login_cmd(USER, PASS)).await.unwrap();
+
+//            // BUG: We should probably reset the data buffer each time we read
+//            read_half.read(&mut buf).await.unwrap();
+
+//            let text = from_utf8(&buf).unwrap();
+//            println!("Authentication response: {}", text);
+
+//            match find_cmd(text) {
+//                RESP_AUTHENTICATION_SUCCESSFUL => Ok(()),
+//                _ => Err("Incorrect username/password"),
+//            }
+//        }
+
+//        _ => Err("Connection denied"),
+//    }
+//}
+
+//fn send_cmd(stream: &TcpStream, cmd: &str) {
+//    println!("[UP] {}", cmd);
+//    stream.write(cmd.as_bytes());
+//}
+
+//fn send_cmd(write_half: WriteHalf<TcpStream>, cmd: &str) {
+//    println!("[UP] {}", cmd);
+//    write_half.write(cmd.as_bytes());
+//}
+
+//async fn send_cmd_async(mut stream: WriteHalf<TcpStream>, cmd: &str) -> Result<usize, std::io::Error> {
+//    println!("[UP] {}", cmd);
+//    let bytes: usize = stream.write(cmd.as_bytes()).await.unwrap();
+
+//    Ok(bytes)
+//}
+
+//fn send_cmd(mut stream: tokio::net::TcpStream, cmd: &str) -> Result<usize, _> {
+//    println!("[UP] {}", cmd);
+//    stream.write(cmd.as_bytes()).await.unwrap()
+//}
 
 // slices a str up to the first semicolon
 fn find_cmd(s: &str) -> &str {
