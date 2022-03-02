@@ -8,7 +8,9 @@ use tokio::time::{Duration, sleep};
 
 const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
 const RESP_CONNECTION_ALLOWED: &str = "##CN1";
-const CMD_REQUEST_CONNECTION: &str = "##CN;";
+const CMD_REQUEST_CONNECTION: &[u8] = b"##CN;";
+const CMD_ENABLE_AUTO_INFO: &[u8] = b"AI2;";
+const CMD_ENABLE_BANDSCOPE: &[u8] = b"DD01;";
 const RADIO_KEEPALIVE_MS: u64 = 5000;
 
 const HOST: &str = "192.168.1.229:60000";
@@ -16,6 +18,7 @@ const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
 
 const ENABLE_BANDSCOPE: bool = false;
+const MPSC_CHANNEL_SIZE: usize = 64;
 
 // 5 + 1280 + 1
 // ##DD2 + [640 * 2] + ;
@@ -31,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream: TcpStream = TcpStream::connect(HOST).await?;
     println!("Connected to server on port 1234");
 
-    stream.write(CMD_REQUEST_CONNECTION.as_bytes()).await?;
+    stream.write(CMD_REQUEST_CONNECTION).await?;
     println!("Sent connection request CN, awaiting reply...");
 
     let mut buf = [0 as u8; BUFFER_SIZE];
@@ -57,11 +60,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match find_cmd(text) {
                 RESP_AUTHENTICATION_SUCCESSFUL => {
                     println!("Authentication successful!");
-                    stream.write(b"AI2;").await?;
+                    stream.write(CMD_ENABLE_AUTO_INFO).await?;
 
                     // enable bandscope - high cycle lan
                     if ENABLE_BANDSCOPE {
-                        stream.write(b"DD01;").await?;
+                        stream.write(CMD_ENABLE_BANDSCOPE).await?;
                     }
                 }
                 other => {
@@ -75,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let (mut read_stream, mut write_stream) = split(stream);
-    let (tx, mut rx) = mpsc::channel(32);
+    let (tx, mut rx) = mpsc::channel(MPSC_CHANNEL_SIZE);
 
     let reader_thread = spawn(async move {
         println!("spawning connection thread");
