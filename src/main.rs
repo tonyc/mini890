@@ -1,28 +1,30 @@
 use std::str::from_utf8;
-use std::thread;
-use std::time::Duration;
-//use std::sync::mpsc;
 
-//use tokio::join;
-use tokio::spawn;
-use tokio::net::TcpStream;
 use tokio::io::{split, AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::spawn;
 use tokio::sync::mpsc;
+use tokio::time::{Duration, sleep};
 
 const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
 const RESP_CONNECTION_ALLOWED: &str = "##CN1";
 const CMD_REQUEST_CONNECTION: &str = "##CN;";
+const RADIO_KEEPALIVE_MS: u64 = 5000;
 
-//const CMD_USER_PASS: &str = "##ID10705kenwoodadmin;";
 const HOST: &str = "192.168.1.229:60000";
 const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
+
+const ENABLE_BANDSCOPE: bool = false;
+
+// 5 + 1280 + 1
+// ##DD2 + [640 * 2] + ;
 const BUFFER_SIZE: usize = 1286; // this appears to be the maximum size of the ##DD2 bandscope message
 
-//#[derive(Debug)]
-//enum Commands {
-//    PowerState
-//}
+#[derive(Debug)]
+enum Commands {
+    PowerStateGet,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,10 +57,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match find_cmd(text) {
                 RESP_AUTHENTICATION_SUCCESSFUL => {
                     println!("Authentication successful!");
-                    stream.write("AI2;".as_bytes()).await?;
+                    stream.write(b"AI2;").await?;
 
-                    // enable bandscope
-                    //stream.write("DD11;".as_bytes()).await?;
+                    // enable bandscope - high cycle lan
+                    if ENABLE_BANDSCOPE {
+                        stream.write(b"DD01;").await?;
+                    }
                 }
                 other => {
                     println!("Unknown command: {:?}", other);
@@ -76,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let reader_thread = spawn(async move {
         println!("spawning connection thread");
 
-        let mut buf = [' ' as u8; BUFFER_SIZE];
+        let mut buf = ['0' as u8; BUFFER_SIZE];
         loop {
             match read_stream.read(&mut buf).await.unwrap() {
                 0 => {
@@ -86,78 +90,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 n => {
                     let text = from_utf8(&buf[0..n]).unwrap();
-                    let mut cmds: Vec<&str> = vec![];
 
                     for cmd in text.split_terminator(";") {
-                        cmds.push(cmd);
-                    }
-
-                    for cmd in cmds {
                         println!("[DN] {}", cmd);
                     }
 
                     // reset the buffer
-                    buf.iter_mut().for_each(|x| *x = ' ' as u8);
+                    buf.iter_mut().for_each(|x| *x = '0' as u8);
                 }
-
-                //Err(other) => {
-                //    println!("Error reading stream: {:?}", other);
-                //    break;
-                //}
             }
-
-            thread::yield_now();
         } // loop
 
         println!("Client Terminated.");
     });
 
-    let writer_thread = spawn(async move {
-        println!("writer thread spawned");
+    //let writer_thread = spawn(async move {
+    //    println!("writer thread spawned");
 
-        while let Some(cmd) = rx.recv().await {
-            println!("Got cmd: {:?}", cmd);
-            write_stream.write_all(cmd).await.unwrap();
-        }
+    //    while let Some(cmd) = rx.recv().await {
+    //        println!("Got cmd: {:?}", cmd);
+    //        write_stream.write_all(cmd).await.unwrap();
+    //    }
 
-        //loop {
-        //    match rx.recv().await {
-        //        Some(cmd) => {
-        //            println!("Got something: {:?}", cmd);
-        //            write_stream.write_all(cmd.as_bytes()).await.unwrap();
-        //        }
-        //        None => {
-        //            println!("Got nothing");
-        //        }
-        //    }
-        //    //println!("recv loop");
-        //    ////println!("received cmd: {:?}", cmd);
-
-        //    //let cmd = rx.recv().;
-        //    ////write_stream.write(cmd.as_bytes()).await.unwrap();
-        //}
-
-        //while let Some(cmd) = rx.recv().await {
-        //    println!("received cmd: {:?}", cmd);
-        //    write_stream.write(cmd.as_bytes()).await.unwrap();
-        //}
-        //println!("Writer thread done");
-
-    });
+    //});
 
     let timer_thread = spawn(async move {
         println!("spawning timer thread");
         loop {
-            println!("pinging radio");
-            tx.send("PS;".as_bytes()).await.unwrap();
-            sleep(500);
+            println!("Pinging radio");
+            tx.send(Commands::PowerStateGet).await.unwrap();
+            sleep(Duration::from_millis(RADIO_KEEPALIVE_MS)).await;
         }
     });
 
 
+    println!("entering receive loop");
+    while let Some(cmd) = rx.recv().await {
+        println!("Got cmd: {:?}", cmd);
+
+        match cmd {
+            Commands::PowerStateGet => {
+                println!("keeping radio alive with PS;");
+                write_stream.write(b"PS;").await.unwrap();
+            }
+        }
+    }
+
     timer_thread.await.unwrap();
     reader_thread.await.unwrap();
-    writer_thread.await.unwrap();
+    //writer_thread.await.unwrap();
 
     Ok(())
 }
@@ -198,28 +179,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //    }
 //}
 
-//fn send_cmd(stream: &TcpStream, cmd: &str) {
-//    println!("[UP] {}", cmd);
-//    stream.write(cmd.as_bytes());
-//}
-
-//fn send_cmd(write_half: WriteHalf<TcpStream>, cmd: &str) {
-//    println!("[UP] {}", cmd);
-//    write_half.write(cmd.as_bytes());
-//}
-
-//async fn send_cmd_async(mut stream: WriteHalf<TcpStream>, cmd: &str) -> Result<usize, std::io::Error> {
-//    println!("[UP] {}", cmd);
-//    let bytes: usize = stream.write(cmd.as_bytes()).await.unwrap();
-
-//    Ok(bytes)
-//}
-
-//fn send_cmd(mut stream: tokio::net::TcpStream, cmd: &str) -> Result<usize, _> {
-//    println!("[UP] {}", cmd);
-//    stream.write(cmd.as_bytes()).await.unwrap()
-//}
-
 // slices a str up to the first semicolon
 fn find_cmd(s: &str) -> &str {
     let pos: usize = s.find(";").unwrap();
@@ -233,6 +192,3 @@ fn login_cmd(user: &str, pass: &str) -> String {
     format!("##ID1{}{}{}{};", user_len, pass_len, user, pass)
 }
 
-fn sleep(duration: u64) {
-    thread::sleep(Duration::from_millis(duration));
-}
