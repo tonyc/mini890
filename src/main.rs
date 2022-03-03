@@ -145,6 +145,10 @@ async fn main() -> Result<()> {
         println!("Client Terminated.");
     });
 
+    // I don't know why having a separate writer thread only works
+    // for the very first write, and nothing afterwards - something about
+    // Rust that I just don't understand just yet.
+    //
     //let writer_thread = spawn(async move {
     //    println!("writer thread spawned");
 
@@ -165,13 +169,11 @@ async fn main() -> Result<()> {
     });
 
 
-    //println!("entering receive loop");
+    // This should be in a separate thread, but I don't
+    // know why it doesn't work as such.
     while let Some(cmd) = rx.recv().await {
-        //println!("Got cmd: {:?}", cmd);
-
         match cmd {
             Commands::PowerStateGet => {
-                //println!("keeping radio alive with PS;");
                 write_stream.write(b"PS;").await.unwrap();
             }
         }
@@ -184,40 +186,6 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-//async fn radio_authenticate(mut read_half: ReadHalf<TcpStream>, mut write_half: WriteHalf<TcpStream>) -> Result<(), &'static str> {
-//    send_cmd_async(write_half, &CMD_REQUEST_CONNECTION).await.unwrap();
-//    println!("Sent connection request CN, awaiting reply...");
-
-//    let mut buf = [0 as u8; BUFFER_SIZE];
-//    // let data: Vec<u8> = vec![];
-
-//    read_half.read(&mut buf).await.unwrap();
-
-//    let text = from_utf8(&buf).unwrap();
-
-//    // BUG: text has the entire 1k buffer padded with zeroes
-//    println!("Read text: {}", text);
-
-//    match find_cmd(text) {
-//        RESP_CONNECTION_ALLOWED => {
-//            println!("Sending username/password");
-//            send_cmd_async(write_half, &login_cmd(USER, PASS)).await.unwrap();
-
-//            // BUG: We should probably reset the data buffer each time we read
-//            read_half.read(&mut buf).await.unwrap();
-
-//            let text = from_utf8(&buf).unwrap();
-//            println!("Authentication response: {}", text);
-
-//            match find_cmd(text) {
-//                RESP_AUTHENTICATION_SUCCESSFUL => Ok(()),
-//                _ => Err("Incorrect username/password"),
-//            }
-//        }
-
-//        _ => Err("Connection denied"),
-//    }
-//}
 
 // slices a str up to the first semicolon
 fn find_cmd(s: &str) -> &str {
