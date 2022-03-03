@@ -94,6 +94,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 
 [[package]]
+name = "mini890"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "tokio",
+]
+
+[[package]]
 name = "mio"
 version = "0.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -284,14 +292,6 @@ checksum = "66d72b759436ae32898a2af0a14218dbf55efde3feeb170eb623637db85ee1e0"
 dependencies = [
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "socket_test"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "tokio",
 ]
 
 [[package]]

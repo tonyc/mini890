@@ -1,19 +1,24 @@
-use std::str::from_utf8;
 use std::io::stdout;
+use std::str::from_utf8;
+
+pub mod command_callbacks;
+
+use tokio::{
+    io::{split, AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    spawn,
+    sync::mpsc,
+    time::{Duration, sleep}
+};
 
 use crossterm::{
     cursor,
     execute,
     terminal::{Clear, ClearType},
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    style::Print,
     Result,
 };
 
-use tokio::io::{split, AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio::spawn;
-use tokio::sync::mpsc;
-use tokio::time::{Duration, sleep};
 
 const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
 const RESP_CONNECTION_ALLOWED: &str = "##CN1";
@@ -28,7 +33,7 @@ const HOST: &str = "192.168.1.229:60000";
 const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
 
-const ENABLE_BANDSCOPE: bool = false;
+const ENABLE_BANDSCOPE: bool = true;
 const MPSC_CHANNEL_SIZE: usize = 64;
 
 //   5   +    1280    + 1
@@ -111,6 +116,8 @@ async fn main() -> Result<()> {
 
     //let(cols, rows) = size()?;
 
+    //let command_callbacks: HashMap<&str, _> = HashMap::new();
+
     let reader_thread = spawn(async move {
         //println!("spawning connection thread");
 
@@ -118,7 +125,7 @@ async fn main() -> Result<()> {
         loop {
             match read_stream.read(&mut buf).await.unwrap() {
                 0 => {
-                    //println!("No bytes to read. Did the radio drop the connection?");
+                    println!("No bytes to read. Did the radio drop the connection?");
                     break;
                 }
 
@@ -126,45 +133,7 @@ async fn main() -> Result<()> {
                     let text = from_utf8(&buf[0..n]).unwrap();
 
                     for cmd in text.split_terminator(";") {
-                        match &cmd[0..=1] {
-                            "FA" => {
-                                execute!(
-                                    stdout(),
-                                    cursor::MoveTo(0, 1),
-                                    SetForegroundColor(Color::White),
-                                    SetBackgroundColor(Color::DarkBlue),
-                                    Print(cmd),
-                                ).unwrap();
-
-                            }
-
-                            "FB" => {
-                                execute!(
-                                    stdout(),
-                                    cursor::MoveTo(40, 1),
-                                    SetForegroundColor(Color::White),
-                                    SetBackgroundColor(Color::DarkBlue),
-                                    Print(cmd),
-                                ).unwrap();
-
-                            }
-
-                            "SM" => {
-                                execute!(
-                                    stdout(),
-                                    cursor::MoveTo(0, 5),
-                                    SetForegroundColor(Color::White),
-                                    SetBackgroundColor(Color::DarkBlue),
-                                    Print(cmd),
-                                ).unwrap();
-
-                            }
-
-                            _  => {
-                                    //Print(format!("[DN] {}", cmd)),
-                                ()
-                            }
-                        }
+                        command_callbacks::dispatch(cmd);
                     }
 
                     // reset the buffer
@@ -214,7 +183,6 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
 
 //async fn radio_authenticate(mut read_half: ReadHalf<TcpStream>, mut write_half: WriteHalf<TcpStream>) -> Result<(), &'static str> {
 //    send_cmd_async(write_half, &CMD_REQUEST_CONNECTION).await.unwrap();
