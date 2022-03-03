@@ -48,37 +48,28 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut stream: TcpStream = TcpStream::connect(HOST).await?;
-    //println!("Connected to server on port 1234");
+    let mut buf = [0 as u8; BUFFER_SIZE];
 
     stream.write(CMD_REQUEST_CONNECTION).await?;
-    //println!("Sent connection request CN, awaiting reply...");
-
-    let mut buf = [0 as u8; BUFFER_SIZE];
     stream.read(&mut buf).await?;
 
     let text = from_utf8(&buf).unwrap();
 
-    // BUG: text has the entire 1k buffer padded with zeroes
-    //println!("Read text: {}", text);
-
     match find_cmd(text) {
         RESP_CONNECTION_ALLOWED => {
-            //println!("Sending username/password");
             stream.write(&login_cmd(USER, PASS).as_bytes()).await?;
-            //send_cmd(&stream, &login_cmd(USER, PASS));
 
-            // TODO: We should probably reset the data buffer each time we read
+            // FIXME: We should probably reset the data buffer each time we read,
+            // but we only read once here so it's fine.
             stream.read(&mut buf).await?;
 
             let text = from_utf8(&buf).unwrap();
-            //println!("Authentication response: {}", text);
 
             match find_cmd(text) {
                 RESP_AUTHENTICATION_SUCCESSFUL => {
                     println!("Authentication successful!");
                     stream.write(CMD_ENABLE_AUTO_INFO).await?;
 
-                    // enable bandscope - high cycle lan
                     if ENABLE_BANDSCOPE {
                         stream.write(CMD_ENABLE_BANDSCOPE).await?;
                     }
@@ -86,18 +77,14 @@ async fn main() -> Result<()> {
                     stream.write(CMD_REQUEST_VFO_A).await?;
                     stream.write(CMD_REQUEST_VFO_B).await?;
                 }
-                _other => {
-                    ()
-                    //println!("Unknown command: {:?}", other);
+                other => {
+                    println!("Unknown command: {:?}", other);
                 }
             }
         }
-        _  => {
-            ()
+        other  => {
+            println!("Unknown command: {:?}", other);
         }
-        //other => {
-        //    //println!("Unknown command: {:?}", other);
-        //}
     }
 
     let (mut read_stream, mut write_stream) = split(stream);
@@ -108,19 +95,11 @@ async fn main() -> Result<()> {
         Clear(ClearType::All),
         cursor::DisableBlinking,
         cursor::Hide,
-        //cursor::SetCursorShape(cursor::CursorShape::UnderScore)
         cursor::MoveTo(20, 0),
         Print("[ mini890 ]")
     ).unwrap();
 
-
-    //let(cols, rows) = size()?;
-
-    //let command_callbacks: HashMap<&str, _> = HashMap::new();
-
     let reader_thread = spawn(async move {
-        //println!("spawning connection thread");
-
         let mut buf = ['0' as u8; BUFFER_SIZE];
         loop {
             match read_stream.read(&mut buf).await.unwrap() {
@@ -160,9 +139,7 @@ async fn main() -> Result<()> {
     //});
 
     let timer_thread = spawn(async move {
-        //println!("spawning timer thread");
         loop {
-            //println!("Pinging radio");
             tx.send(Commands::PowerStateGet).await.unwrap();
             sleep(Duration::from_millis(RADIO_KEEPALIVE_MS)).await;
         }
