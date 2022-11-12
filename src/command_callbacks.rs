@@ -1,10 +1,12 @@
-//use std::io::stdout;
+use std::io::stdout;
+use crossterm::{
+    cursor,
+    execute,
+    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
+    terminal::{Clear, ClearType},
+};
 
-//use crossterm::{
-//    cursor,
-//    execute,
-//    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
-//};
+use figlet_rs::FIGfont;
 
 const BANDSCOPE_BASE: u8 = 140;
 const AUDIOSCOPE_BASE: u8 = 50;
@@ -14,43 +16,48 @@ pub fn dispatch(cmd: &str) {
         "FA" => {
             handle_vfo_a(cmd);
         }
-        "FB" => {
-            handle_vfo_b(cmd);
-        }
-        "SM" => {
-            handle_smeter(cmd);
-        }
-        "##" => match &cmd[2..=3] {
-            "DD" => match cmd.chars().nth(4) {
-                Some('2') => {
-                    handle_bandscope(cmd);
-                }
-                Some('3') => {
-                    handle_audioscope(cmd);
-                }
-                _ => {
-                    println!("Unknown DD command: {:?}", cmd)
-                }
-            },
+        //"FB" => {
+        //    handle_vfo_b(cmd);
+        //}
+        //"SM" => {
+        //    handle_smeter(cmd);
+        //}
+        //"##" => match &cmd[2..=3] {
+        //    "DD" => match cmd.chars().nth(4) {
+        //        Some('2') => {
+        //            handle_bandscope(cmd);
+        //        }
+        //        Some('3') => {
+        //            handle_audioscope(cmd);
+        //        }
+        //        _ => {
+        //            println!("Unknown DD command: {:?}", cmd)
+        //        }
+        //    },
 
-            _ => {
-                println!("Unknown LAN command: {:?}", cmd);
-            }
-        },
+        //    _ => {
+        //        println!("Unknown LAN command: {:?}", cmd);
+        //    }
+        //},
         _ => handle_unknown_cmd(cmd),
     }
 }
 
 pub fn handle_vfo_a(cmd: &str) {
-    println!("{}", cmd);
-    //execute!(
-    //    stdout(),
-    //    cursor::MoveTo(0, 1),
-    //    SetForegroundColor(Color::White),
-    //    SetBackgroundColor(Color::DarkBlue),
-    //    Print(format!("A: {}", format_vfo(cmd))),
-    //).unwrap();
+    //println!("{}", cmd);
+    let font = FIGfont::from_file("resources/small.flf").unwrap();
+    let freq = cmd.replace("FA000", "").replace("FB000", "").replace(";", "");
+    let text = font.convert(&freq).unwrap();
+
+    execute!(
+        stdout(),
+        cursor::MoveTo(0, 7),
+        Clear(ClearType::FromCursorUp),
+        cursor::MoveTo(0, 1),
+        Print(format!("{}", text)),
+    ).unwrap();
 }
+
 
 pub fn handle_vfo_b(cmd: &str) {
     println!("{}", cmd);
@@ -84,6 +91,8 @@ pub fn format_vfo(val: &str) -> i32 {
     //    chunks.push(chunk);
     //}
 
+    //hz_str;
+
     hz_str.parse::<i32>().unwrap()
 }
 
@@ -115,7 +124,7 @@ pub fn parse_scope(data: &str, base_value: u8) -> Vec<u8> {
 }
 
 pub fn handle_unknown_cmd(cmd: &str) {
-    println!("[DN] {}", cmd);
+    //println!("[DN] {}", cmd);
     //println!("Got audioscope length: {}", cmd.len());
     //Print(format!("[DN] {}", cmd)),
     //()

@@ -46,6 +46,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "figlet-rs"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01af5c4fc8506204d2280509e9d57d1b41e54e587c185ac09baef30d21ae63ed"
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -98,6 +104,7 @@ name = "mini890"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "figlet-rs",
  "tokio",
 ]
 

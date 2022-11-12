@@ -49,15 +49,6 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // execute!(
-    //     stdout(),
-    //     Clear(ClearType::All),
-    //     cursor::DisableBlinking,
-    //     cursor::Hide,
-    //     cursor::MoveTo(20, 0),
-    //     Print("[ mini890 ]")
-    // ).unwrap();
-
     let mut stream: TcpStream = TcpStream::connect(HOST).await?;
     let mut buf = [0 as u8; BUFFER_SIZE];
 
@@ -110,6 +101,17 @@ async fn main() -> Result<()> {
         }
     }
 
+
+    // now we're connected, clear the screen
+    execute!(
+        stdout(),
+        Clear(ClearType::All),
+        //cursor::DisableBlinking,
+        //cursor::Hide,
+        //cursor::MoveTo(20, 0),
+        //Print("[ mini890 ]")
+    ).unwrap();
+
     let (mut read_stream, mut write_stream) = split(stream);
     let (sender, mut receiver) = mpsc::channel(MPSC_CHANNEL_SIZE);
 
@@ -139,10 +141,7 @@ async fn main() -> Result<()> {
     });
 
     let command_writer_thread = spawn(async move {
-        println!("writer thread spawned");
-
         while let Some(cmd) = receiver.recv().await {
-            println!("CommandWriterThread: Got cmd: {:?}", cmd);
             match cmd {
                 Commands::PowerStateGet => {
                     write_stream.write(b"PS;").await.unwrap();
