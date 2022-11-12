@@ -44,14 +44,14 @@ pub fn dispatch(cmd: &str) {
 }
 
 pub fn handle_vfo_a(cmd: &str) {
-    //println!("{}", cmd);
     let font = FIGfont::from_file("resources/small.flf").unwrap();
+    let font_height:u16 = 7;
     let freq = cmd.replace("FA000", "").replace("FB000", "").replace(";", "");
     let text = font.convert(&freq).unwrap();
 
     execute!(
         stdout(),
-        cursor::MoveTo(0, 7),
+        cursor::MoveTo(0, font_height),
         Clear(ClearType::FromCursorUp),
         cursor::MoveTo(0, 1),
         Print(format!("{}", text)),
