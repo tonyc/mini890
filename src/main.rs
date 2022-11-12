@@ -8,32 +8,34 @@ use tokio::{
     net::TcpStream,
     spawn,
     sync::mpsc,
-    time::{Duration, sleep}
+    time::{sleep, Duration},
 };
 
 use crossterm::{
-    cursor,
-    execute,
-    terminal::{Clear, ClearType},
+    cursor, execute,
     style::Print,
+    terminal::{Clear, ClearType},
     Result,
 };
-
 
 const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
 const RESP_CONNECTION_ALLOWED: &str = "##CN1";
 const CMD_REQUEST_CONNECTION: &[u8] = b"##CN;";
 const CMD_ENABLE_AUTO_INFO: &[u8] = b"AI2;";
 const CMD_ENABLE_BANDSCOPE: &[u8] = b"DD01;";
+const CMD_DISABLE_BANDSCOPE: &[u8] = b"DD00;";
+const CMD_ENABLE_AUDIOSCOPE: &[u8] = b"DD11;";
+const CMD_DISABLE_AUDIOSCOPE: &[u8] = b"DD10;";
 const RADIO_KEEPALIVE_MS: u64 = 5000;
 const CMD_REQUEST_VFO_A: &[u8] = b"FA;";
 const CMD_REQUEST_VFO_B: &[u8] = b"FB;";
 
-const HOST: &str = "192.168.1.229:60000";
+const HOST: &str = "192.168.1.132:60000";
 const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
 
-const ENABLE_BANDSCOPE: bool = true;
+const ENABLE_BANDSCOPE: bool = false;
+const ENABLE_AUDIOSCOPE: bool = true;
 const MPSC_CHANNEL_SIZE: usize = 64;
 
 //   5   +    1280    + 1
@@ -47,6 +49,15 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // execute!(
+    //     stdout(),
+    //     Clear(ClearType::All),
+    //     cursor::DisableBlinking,
+    //     cursor::Hide,
+    //     cursor::MoveTo(20, 0),
+    //     Print("[ mini890 ]")
+    // ).unwrap();
+
     let mut stream: TcpStream = TcpStream::connect(HOST).await?;
     let mut buf = [0 as u8; BUFFER_SIZE];
 
@@ -71,7 +82,19 @@ async fn main() -> Result<()> {
                     stream.write(CMD_ENABLE_AUTO_INFO).await?;
 
                     if ENABLE_BANDSCOPE {
+                        println!("Bandscope enabled");
                         stream.write(CMD_ENABLE_BANDSCOPE).await?;
+                    } else {
+                        println!("Bandscope disabled");
+                        stream.write(CMD_DISABLE_BANDSCOPE).await?;
+                    }
+
+                    if ENABLE_AUDIOSCOPE {
+                        println!("Audioscope enabled");
+                        stream.write(CMD_ENABLE_AUDIOSCOPE).await?;
+                    } else {
+                        println!("Audioscope disabled");
+                        stream.write(CMD_DISABLE_AUDIOSCOPE).await?;
                     }
 
                     stream.write(CMD_REQUEST_VFO_A).await?;
@@ -82,22 +105,13 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        other  => {
+        other => {
             println!("Unknown command: {:?}", other);
         }
     }
 
     let (mut read_stream, mut write_stream) = split(stream);
-    let (tx, mut rx) = mpsc::channel(MPSC_CHANNEL_SIZE);
-
-    execute!(
-        stdout(),
-        Clear(ClearType::All),
-        cursor::DisableBlinking,
-        cursor::Hide,
-        cursor::MoveTo(20, 0),
-        Print("[ mini890 ]")
-    ).unwrap();
+    let (sender, mut receiver) = mpsc::channel(MPSC_CHANNEL_SIZE);
 
     let reader_thread = spawn(async move {
         let mut buf = ['0' as u8; BUFFER_SIZE];
@@ -124,45 +138,32 @@ async fn main() -> Result<()> {
         println!("Client Terminated.");
     });
 
-    // I don't know why having a separate writer thread only works
-    // for the very first write, and nothing afterwards - something about
-    // Rust that I just don't understand just yet.
-    //
-    //let writer_thread = spawn(async move {
-    //    println!("writer thread spawned");
+    let command_writer_thread = spawn(async move {
+        println!("writer thread spawned");
 
-    //    while let Some(cmd) = rx.recv().await {
-    //        println!("Got cmd: {:?}", cmd);
-    //        write_stream.write_all(cmd).await.unwrap();
-    //    }
+        while let Some(cmd) = receiver.recv().await {
+            println!("CommandWriterThread: Got cmd: {:?}", cmd);
+            match cmd {
+                Commands::PowerStateGet => {
+                    write_stream.write(b"PS;").await.unwrap();
+                }
+            }
+        }
+    });
 
-    //});
-
-    let timer_thread = spawn(async move {
+    let power_watchdog_thread = spawn(async move {
         loop {
-            tx.send(Commands::PowerStateGet).await.unwrap();
+            sender.send(Commands::PowerStateGet).await.unwrap();
             sleep(Duration::from_millis(RADIO_KEEPALIVE_MS)).await;
         }
     });
 
-
-    // This should be in a separate thread, but I don't
-    // know why it doesn't work as such.
-    while let Some(cmd) = rx.recv().await {
-        match cmd {
-            Commands::PowerStateGet => {
-                write_stream.write(b"PS;").await.unwrap();
-            }
-        }
-    }
-
-    timer_thread.await.unwrap();
+    power_watchdog_thread.await.unwrap();
     reader_thread.await.unwrap();
-    //writer_thread.await.unwrap();
+    command_writer_thread.await.unwrap();
 
     Ok(())
 }
-
 
 // slices a str up to the first semicolon
 fn find_cmd(s: &str) -> &str {
@@ -176,4 +177,3 @@ fn login_cmd(user: &str, pass: &str) -> String {
 
     format!("##ID1{}{}{}{};", user_len, pass_len, user, pass)
 }
-

@@ -1,35 +1,44 @@
-use std::io::stdout;
+//use std::io::stdout;
 
-use crossterm::{
-    cursor,
-    execute,
-    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
-};
+//use crossterm::{
+//    cursor,
+//    execute,
+//    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
+//};
 
 const BANDSCOPE_BASE: u8 = 140;
+const AUDIOSCOPE_BASE: u8 = 50;
 
 pub fn dispatch(cmd: &str) {
     match &cmd[0..=1] {
-        "FA" => { handle_vfo_a(cmd); }
-        "FB" => { handle_vfo_b(cmd); }
-        "SM" => { handle_smeter(cmd); }
-        "##" => {
-            match &cmd[2..=3] {
-                "DD" => {
-                    match cmd.chars().nth(4) {
-                        Some('2') => { handle_bandscope(cmd); }
-                        Some('3') => { handle_audioscope(cmd); }
-                        _ => { }
-                    }
-
-                }
-
-                _ => { println!("Unknown LAN command: {:?}", cmd); }
-            }
+        "FA" => {
+            handle_vfo_a(cmd);
         }
-        _  => { handle_unknown_cmd(cmd) }
-    }
+        "FB" => {
+            handle_vfo_b(cmd);
+        }
+        "SM" => {
+            handle_smeter(cmd);
+        }
+        "##" => match &cmd[2..=3] {
+            "DD" => match cmd.chars().nth(4) {
+                Some('2') => {
+                    handle_bandscope(cmd);
+                }
+                Some('3') => {
+                    handle_audioscope(cmd);
+                }
+                _ => {
+                    println!("Unknown DD command: {:?}", cmd)
+                }
+            },
 
+            _ => {
+                println!("Unknown LAN command: {:?}", cmd);
+            }
+        },
+        _ => handle_unknown_cmd(cmd),
+    }
 }
 
 pub fn handle_vfo_a(cmd: &str) {
@@ -89,18 +98,20 @@ pub fn handle_bandscope(cmd: &str) -> Vec<u8> {
     bandscope_data
 }
 
-pub fn parse_scope(data: &str, base_value: u8) -> Vec<u8> {
-    data
-    .as_bytes()
-    .chunks(2)
-    .map(|x| std::str::from_utf8(x).unwrap())
-    .map(|x| base_value - u8::from_str_radix(x, 16).unwrap())
-    //.map(|x| u8::from_str_radix(x, 16).unwrap())
-    .collect::<Vec<u8>>()
+pub fn handle_audioscope(cmd: &str) -> Vec<u8> {
+    //println!("Got audioscope length: {}", cmd.len());
+    let scope_data = parse_scope(&cmd.replace("##DD3", ""), AUDIOSCOPE_BASE);
+    println!("{:?}", scope_data);
+    scope_data
 }
 
-pub fn handle_audioscope(cmd: &str) {
-    //println!("Got audioscope length: {}", cmd.len());
+pub fn parse_scope(data: &str, base_value: u8) -> Vec<u8> {
+    data.as_bytes()
+        .chunks(2)
+        .map(|x| std::str::from_utf8(x).unwrap())
+        .map(|x| base_value - u8::from_str_radix(x, 16).unwrap())
+        //.map(|x| u8::from_str_radix(x, 16).unwrap())
+        .collect::<Vec<u8>>()
 }
 
 pub fn handle_unknown_cmd(cmd: &str) {
