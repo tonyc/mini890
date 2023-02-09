@@ -1,4 +1,3 @@
-use std::io::stdout;
 use std::str::from_utf8;
 
 pub mod command_callbacks;
@@ -12,10 +11,7 @@ use tokio::{
 };
 
 use crossterm::{
-    cursor, execute,
-    style::Print,
-    terminal::{Clear, ClearType},
-    Result,
+    Result
 };
 
 const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
@@ -34,8 +30,8 @@ const HOST: &str = "192.168.1.132:60000";
 const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
 
-const ENABLE_BANDSCOPE: bool = false;
-const ENABLE_AUDIOSCOPE: bool = true;
+const ENABLE_BANDSCOPE: bool = true;
+const ENABLE_AUDIOSCOPE: bool = false;
 const MPSC_CHANNEL_SIZE: usize = 64;
 
 //   5   +    1280    + 1

@@ -94,14 +94,14 @@ pub fn format_smeter(val: &str) -> &str {
 pub fn handle_bandscope(cmd: &str) -> Vec<u8> {
     //eprintln!("Got bandscope length: {}", cmd.len());
     let bandscope_data = parse_scope(&cmd.replace("##DD2", ""), BANDSCOPE_BASE);
-    println!("{:?}", bandscope_data);
+    println!("bandscope: {:?}", bandscope_data);
     bandscope_data
 }
 
 pub fn handle_audioscope(cmd: &str) -> Vec<u8> {
     //println!("Got audioscope length: {}", cmd.len());
     let scope_data = parse_scope(&cmd.replace("##DD3", ""), AUDIOSCOPE_BASE);
-    println!("{:?}", scope_data);
+    println!("audioscope: {:?}", scope_data);
     scope_data
 }
 
