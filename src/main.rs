@@ -1,17 +1,12 @@
 use std::str::from_utf8;
-
 pub mod command_callbacks;
 
 use tokio::{
     io::{split, AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    net::{TcpStream, UdpSocket},
     spawn,
     sync::mpsc,
     time::{sleep, Duration},
-};
-
-use crossterm::{
-    Result
 };
 
 const RESP_AUTHENTICATION_SUCCESSFUL: &str = "##ID1";
@@ -39,12 +34,10 @@ const MPSC_CHANNEL_SIZE: usize = 64;
 const BUFFER_SIZE: usize = 1286; // this appears to be the maximum size of the ##DD2 bandscope message
 
 #[derive(Debug)]
-enum Commands {
-    PowerStateGet,
-}
+enum Commands { PowerStateGet, }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
     // execute!(
     //     stdout(),
     //     Clear(ClearType::All),
@@ -54,47 +47,58 @@ async fn main() -> Result<()> {
     //     Print("[ mini890 ]")
     // ).unwrap();
 
-    let mut stream: TcpStream = TcpStream::connect(HOST).await?;
+    let mut stream: TcpStream = TcpStream::connect(HOST).await.unwrap();
     let mut buf = [0 as u8; BUFFER_SIZE];
 
-    stream.write(CMD_REQUEST_CONNECTION).await?;
-    stream.read(&mut buf).await?;
+    let udp_socket = UdpSocket::bind("0.0.0.0:8000").await.unwrap();
+    let remote_addr = "127.0.0.1:8001";
+    udp_socket.connect(remote_addr).await.unwrap();
+
+
+    // let mut buf = [0u8; 32];
+    // // recv from remote_addr
+    // let len = udp_socket.recv(&mut buf).await?;
+    // // send to remote_addr
+    // let _len = udp_socket.send(&buf[..len]).await?;
+
+    stream.write(CMD_REQUEST_CONNECTION).await.unwrap();
+    stream.read(&mut buf).await.unwrap();
 
     let text = from_utf8(&buf).unwrap();
 
     match find_cmd(text) {
         RESP_CONNECTION_ALLOWED => {
-            stream.write(&login_cmd(USER, PASS).as_bytes()).await?;
+            stream.write(&login_cmd(USER, PASS).as_bytes()).await.unwrap();
 
             // FIXME: We should probably reset the data buffer each time we read,
             // but we only read once here so it's fine.
-            stream.read(&mut buf).await?;
+            stream.read(&mut buf).await.unwrap();
 
             let text = from_utf8(&buf).unwrap();
 
             match find_cmd(text) {
                 RESP_AUTHENTICATION_SUCCESSFUL => {
                     println!("Authentication successful!");
-                    stream.write(CMD_ENABLE_AUTO_INFO).await?;
+                    stream.write(CMD_ENABLE_AUTO_INFO).await.unwrap();
 
                     if ENABLE_BANDSCOPE {
                         println!("Bandscope enabled");
-                        stream.write(CMD_ENABLE_BANDSCOPE).await?;
+                        stream.write(CMD_ENABLE_BANDSCOPE).await.unwrap();
                     } else {
                         println!("Bandscope disabled");
-                        stream.write(CMD_DISABLE_BANDSCOPE).await?;
+                        stream.write(CMD_DISABLE_BANDSCOPE).await.unwrap();
                     }
 
                     if ENABLE_AUDIOSCOPE {
                         println!("Audioscope enabled");
-                        stream.write(CMD_ENABLE_AUDIOSCOPE).await?;
+                        stream.write(CMD_ENABLE_AUDIOSCOPE).await.unwrap();
                     } else {
                         println!("Audioscope disabled");
-                        stream.write(CMD_DISABLE_AUDIOSCOPE).await?;
+                        stream.write(CMD_DISABLE_AUDIOSCOPE).await.unwrap();
                     }
 
-                    stream.write(CMD_REQUEST_VFO_A).await?;
-                    stream.write(CMD_REQUEST_VFO_B).await?;
+                    stream.write(CMD_REQUEST_VFO_A).await.unwrap();
+                    stream.write(CMD_REQUEST_VFO_B).await.unwrap();
                 }
                 other => {
                     println!("Unknown command: {:?}", other);
@@ -107,7 +111,7 @@ async fn main() -> Result<()> {
     }
 
     let (mut read_stream, mut write_stream) = split(stream);
-    let (sender, mut receiver) = mpsc::channel(MPSC_CHANNEL_SIZE);
+    let (tcp_sender, mut tcp_receiver) = mpsc::channel(MPSC_CHANNEL_SIZE);
 
     let reader_thread = spawn(async move {
         let mut buf = ['0' as u8; BUFFER_SIZE];
@@ -122,7 +126,7 @@ async fn main() -> Result<()> {
                     let text = from_utf8(&buf[0..n]).unwrap();
 
                     for cmd in text.split_terminator(";") {
-                        command_callbacks::dispatch(cmd);
+                        command_callbacks::dispatch(cmd, &udp_socket).await.unwrap();
                     }
 
                     // reset the buffer
@@ -137,7 +141,7 @@ async fn main() -> Result<()> {
     let command_writer_thread = spawn(async move {
         println!("writer thread spawned");
 
-        while let Some(cmd) = receiver.recv().await {
+        while let Some(cmd) = tcp_receiver.recv().await {
             println!("CommandWriterThread: Got cmd: {:?}", cmd);
             match cmd {
                 Commands::PowerStateGet => {
@@ -149,7 +153,7 @@ async fn main() -> Result<()> {
 
     let power_watchdog_thread = spawn(async move {
         loop {
-            sender.send(Commands::PowerStateGet).await.unwrap();
+            tcp_sender.send(Commands::PowerStateGet).await.unwrap();
             sleep(Duration::from_millis(RADIO_KEEPALIVE_MS)).await;
         }
     });
@@ -158,7 +162,6 @@ async fn main() -> Result<()> {
     reader_thread.await.unwrap();
     command_writer_thread.await.unwrap();
 
-    Ok(())
 }
 
 // slices a str up to the first semicolon
