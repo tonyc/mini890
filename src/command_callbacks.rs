@@ -57,10 +57,10 @@ pub async fn dispatch(cmd: &str, udp_socket: &UdpSocket) -> io::Result<()> {
 
 // TODO: Needs to take scope low and high frequency
 pub fn bandscope_to_xml_payload(bandscope_data: &[u8]) -> String {
-    let bandscope_data_len = bandscope_data.len();
     let low_scope_freq = 14200000;
     let high_scope_freq = 14350000;
     let scaling_factor = "1.0";
+    let bandscope_data_len = bandscope_data.len();
 
     let spectrum_nums: Vec<String> = bandscope_data.iter()
     .map(|n| n.to_string())
