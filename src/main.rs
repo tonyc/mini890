@@ -21,7 +21,7 @@ const RADIO_KEEPALIVE_MS: u64 = 5000;
 const CMD_REQUEST_VFO_A: &[u8] = b"FA;";
 const CMD_REQUEST_VFO_B: &[u8] = b"FB;";
 
-const HOST: &str = "192.168.1.132:60000";
+const HOST: &str = "192.168.1.106:60000";
 const USER: &str = "testuser";
 const PASS: &str = "testpass123!";
 
